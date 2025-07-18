@@ -33,12 +33,14 @@ pygame.display.set_caption("Python RPG Adventure")
 font = pygame.font.Font(None, 32)
 
 # --- Image Assets ---
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
 try:
-    wood_background = pygame.image.load(os.path.join("rpg-game-pygame", "rpg_gui_v1", "wood-background.png")).convert()
-    paper_background = pygame.image.load(os.path.join("pg-game-Pygame", "rpg_gui_v1", "paper-background.png")).convert()
-    ui_sheet = pygame.image.load(os.path.join("rpg-game-pygame", "rpg_gui_v1", "RPG_GUI_v1.png")).convert_alpha()
+    wood_background = pygame.image.load(os.path.join(script_dir, "assets", "gui-files", "wood background.png")).convert()
+    paper_background = pygame.image.load(os.path.join(script_dir, "assets", "gui-files", "paper background.png")).convert()
+    ui_sheet = pygame.image.load(os.path.join(script_dir,  "assets", "gui-files", "gui-files.png")).convert_alpha()
 except pygame.error:
-    print("Warning: Could not load image assets. Make sure you have the 'rpg-game-pygame/rpg_gui_v1' folder with the required image files.")
+    print("Warning: Could not load image assets. Make sure you have the ' assets, gui-files,' folder with the required image files.")
     wood_background = None
     paper_background = None
     ui_sheet = None
@@ -67,7 +69,7 @@ class Button:
     def draw(self, surface):
         current_image = self.hover_image if self.is_hovered else self.image
         surface.blit(current_image, self.rect.topleft)
-        text_surf = font.render(self.text, True, WHITE)
+        text_surf = font.render(self.text, True, BLACK)
         text_rect = text_surf.get_rect(center=self.rect.center)
         surface.blit(text_surf, text_rect)
 
