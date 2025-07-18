@@ -18,7 +18,14 @@ def load_ui_elements(ui_folder, scale=2):
         "ui_element_005": "panel",
         "ui_element_028": "button_blue",
         "ui_element_029": "button_blue_hover",
-        # Add more mappings here as needed
+        "ui_element_030": "button_green",
+        "ui_element_031": "button_green_hover",
+        "ui_element_032": "button_red",
+        "ui_element_033": "button_red_hover",
+        "ui_element_034": "icon_play",
+        "ui_element_035": "icon_options",
+        "ui_element_036": "icon_quit",
+        "ui_element_001": "background",
     }
 
     elements = {}

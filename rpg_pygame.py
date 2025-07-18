@@ -43,6 +43,7 @@ except FileNotFoundError:
 # --- Asset Loading ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
+
 def load_sprite(path, size=(TILE_SIZE, TILE_SIZE)):
     try:
         sprite = pygame.image.load(os.path.join(script_dir, path)).convert_alpha()
@@ -53,37 +54,46 @@ def load_sprite(path, size=(TILE_SIZE, TILE_SIZE)):
         surface.fill(RED)
         return surface
 
-# --- UI Image Assets ---
-try:
-    wood_background = load_sprite(os.path.join("assets", "gui-files", "wood-background.png"), size=(SCREEN_WIDTH, SCREEN_HEIGHT))
-    paper_background = load_sprite(os.path.join("assets", "gui-files", "paper-background.png"), size=(SCREEN_WIDTH, SCREEN_HEIGHT))
-    ui_sheet = pygame.image.load(os.path.join(script_dir, "ui-grid.png")).convert_alpha()
-except pygame.error:
-    print("Warning: Could not load UI image assets.")
-    wood_background = None
-    paper_background = None
-    ui_sheet = None
-    ui_panel_background = None
-
-# --- UI Slicing ---
-def get_ui_image(x, y, w, h):
-    if ui_sheet:
-        return ui_sheet.subsurface(pygame.Rect(x, y, w, h))
-    return pygame.Surface((w, h))
-
+# --- Golden UI Assets ---
 from golden_ui_loader import load_ui_elements
-
 UI_ELEMENTS = load_ui_elements(os.path.join(script_dir, "ui_elements"), scale=2)
+
+# Use golden backgrounds and panels
+
+# Use UI_ELEMENTS for backgrounds and panels
+gold_background = UI_ELEMENTS.get("background") or UI_ELEMENTS.get("main_bg")
+gold_panel = UI_ELEMENTS.get("panel") or UI_ELEMENTS.get("panel_bg")
+ui_panel_background = gold_panel
+
+# Find a button image from UI_ELEMENTS
+def get_button_images():
+    # Try common keys
+    for key in ["button", "button_001", "button_002", "button_003", "button_004", "button_005"]:
+        if key in UI_ELEMENTS:
+            # Try to find a hover variant
+            hover_key = key + "_hover"
+            hover_img = UI_ELEMENTS.get(hover_key, UI_ELEMENTS[key])
+            return UI_ELEMENTS[key], hover_img
+    # Fallback: use any image that looks like a button
+    for k, v in UI_ELEMENTS.items():
+        if "button" in k:
+            return v, v
+    # Fallback: use panel
+    return gold_panel, gold_panel
+button_img, button_img_hover = get_button_images()
 
 
 
 # --- Button Class ---
 class Button:
     def __init__(self, x, y, text, image, hover_image=None):
-        self.rect = pygame.Rect(x, y, image.get_width(), image.get_height())
-        self.text = text
         self.image = image
         self.hover_image = hover_image if hover_image else image
+        self.text = text
+        self.width = image.get_width()
+        self.height = image.get_height()
+        # Center the button at (x, y)
+        self.rect = pygame.Rect(x - self.width // 2, y - self.height // 2, self.width, self.height)
         self.is_hovered = False
 
     def draw(self, surface):
@@ -361,6 +371,46 @@ class Dungeon:
 
 # --- Game ---
 class Game:
+    def main_menu(self):
+        from ui import UIManager
+        ui = UIManager(screen, font, SCREEN_WIDTH, SCREEN_HEIGHT)
+        waiting = True
+        button_rects = {
+            "play": pygame.Rect(SCREEN_WIDTH // 2 - 120, SCREEN_HEIGHT // 2 - 60, 220, 60),
+            "options": pygame.Rect(SCREEN_WIDTH // 2 - 120, SCREEN_HEIGHT // 2 + 10, 220, 60),
+            "quit": pygame.Rect(SCREEN_WIDTH // 2 - 120, SCREEN_HEIGHT // 2 + 80, 220, 60)
+        }
+        while waiting and not self.game_over:
+            ui.draw_background()
+            ui.draw_panel(SCREEN_WIDTH // 2 + 120, SCREEN_HEIGHT // 2 - 10, center=True)
+            ui.draw_text("HEROES", SCREEN_WIDTH // 2 + 120, SCREEN_HEIGHT // 2 - 60, size=64)
+            ui.draw_text("AND", SCREEN_WIDTH // 2 + 120, SCREEN_HEIGHT // 2, size=32)
+            ui.draw_text("VILLAINS", SCREEN_WIDTH // 2 + 120, SCREEN_HEIGHT // 2 + 50, size=64)
+            ui.draw_button(ui.button_green, ui.icon_play, "PLAY", SCREEN_WIDTH // 2 - 120, SCREEN_HEIGHT // 2 - 60)
+            ui.draw_button(ui.button_blue, ui.icon_options, "OPTIONS", SCREEN_WIDTH // 2 - 120, SCREEN_HEIGHT // 2 + 10)
+            ui.draw_button(ui.button_red, ui.icon_quit, "QUIT", SCREEN_WIDTH // 2 - 120, SCREEN_HEIGHT // 2 + 80)
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.game_over = True
+                    waiting = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:
+                        self.game_over = True
+                        waiting = False
+                    else:
+                        self.game_state = "setup_num_players"
+                        waiting = False
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    mx, my = event.pos
+                    if button_rects["play"].collidepoint(mx, my):
+                        self.game_state = "setup_num_players"
+                        waiting = False
+                    elif button_rects["options"].collidepoint(mx, my):
+                        self.add_message("Options menu coming soon!")
+                    elif button_rects["quit"].collidepoint(mx, my):
+                        self.game_over = True
+                        waiting = False
     def __init__(self):
         self.players = []
         self.dungeon = None
@@ -372,7 +422,6 @@ class Game:
         self.num_players = 0
         self.current_hero_setup = 1
         self.player_name = ""
-        self.combat_enemies = []
         self.turn_order = []
         self.combat_turn_idx = 0
         self.inventory_selection = 0
@@ -380,52 +429,31 @@ class Game:
     def add_message(self, text):
         self.messages.appendleft(text)
 
-    def draw_text(self, text, x, y, color=WHITE):
+    def draw_text(self, text, x, y, color=WHITE, center=True):
         text_surface = font.render(text, True, color)
-        screen.blit(text_surface, (x, y))
-
-    def main_menu(self):
-        if wood_background:
-            screen.blit(wood_background, (0, 0))
+        text_rect = text_surface.get_rect()
+        if center:
+            text_rect.centerx = x
+            text_rect.top = y
+            screen.blit(text_surface, text_rect)
         else:
-            screen.fill(BLACK)
-        self.draw_text("Python RPG Adventure", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150, color=BLACK)
-
-        start_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "Start Game", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        leaderboard_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "Leaderboard", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        quit_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "Quit", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-
-        start_button.draw(screen)
-        leaderboard_button.draw(screen)
-        quit_button.draw(screen)
-
-        pygame.display.flip()
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.game_over = True
-            if start_button.handle_event(event):
-                self.game_state = "setup_num_players"
-            if leaderboard_button.handle_event(event):
-                self.game_state = "leaderboard"
-            if quit_button.handle_event(event):
-                self.game_over = True
+            screen.blit(text_surface, (x, y))
 
     def setup_num_players(self):
-        if paper_background:
-            screen.blit(paper_background, (0, 0))
+        if gold_background:
+            screen.blit(gold_background, (0, 0))
         else:
             screen.fill(BLACK)
         self.draw_text("Enter number of heroes:", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150, color=BLACK)
 
-        one_player_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "1 Player", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        two_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "2 Players", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        three_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "3 Players", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        one_player_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "1 Player", button_img, button_img_hover)
+        two_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "2 Players", button_img, button_img_hover)
+        three_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "3 Players", button_img, button_img_hover)
 
         one_player_button.draw(screen)
         two_players_button.draw(screen)
         three_players_button.draw(screen)
-
+        self.draw_text("--- MESSAGES ---", 820, SCREEN_HEIGHT - 280)
         pygame.display.flip()
 
         for event in pygame.event.get():
@@ -442,13 +470,13 @@ class Game:
                 self.game_state = "setup_player_name"
 
     def setup_player_name(self):
-        if paper_background:
-            screen.blit(paper_background, (0, 0))
+        if gold_background:
+            screen.blit(gold_background, (0, 0))
         else:
             screen.fill(BLACK)
         self.draw_text(f"Enter name for hero {self.current_hero_setup}:", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150, color=BLACK)
         
-        name_panel = UI_ELEMENTS["panel"]
+        name_panel = gold_panel
         screen.blit(name_panel, (SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 25))
         self.draw_text(self.player_name, SCREEN_WIDTH // 2 - 85, SCREEN_HEIGHT // 2 - 15, color=BLACK)
 
@@ -465,15 +493,15 @@ class Game:
                     self.player_name += event.unicode
 
     def setup_player_class(self):
-        if paper_background:
-            screen.blit(paper_background, (0, 0))
+        if gold_background:
+            screen.blit(gold_background, (0, 0))
         else:
             screen.fill(BLACK)
         self.draw_text(f"Choose class for {self.player_name}:", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150, color=BLACK)
-
-        warrior_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "Warrior", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        mage_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "Mage", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        archer_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "Archer", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        self.draw_text("Inventory", SCREEN_WIDTH // 2, 50, color=BLACK)
+        warrior_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "Warrior", button_img, button_img_hover)
+        mage_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "Mage", button_img, button_img_hover)
+        archer_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "Archer", button_img, button_img_hover)
 
         warrior_button.draw(screen)
         mage_button.draw(screen)
@@ -512,11 +540,11 @@ class Game:
         self.add_message(f"You have entered dungeon level {self.dungeon_level}.")
 
     def main_loop(self):
-        if music_loaded:
-            try:
-                pygame.mixer.music.play(-1)
-            except pygame.error:
-                self.add_message("Could not play music.")
+        self.draw_text("Game Over", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 150, color=BLACK)
+        try:
+            pygame.mixer.music.play(-1)
+        except pygame.error:
+            self.add_message("Could not play music.")
 
         while not self.game_over:
             if self.game_state == "main_menu":
@@ -678,8 +706,8 @@ class Game:
         entity = self.turn_order[self.combat_turn_idx]
 
         if isinstance(entity, Player):
-            attack_button = Button(SCREEN_WIDTH - 250, SCREEN_HEIGHT - 120, "Attack", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-            skill_button = Button(SCREEN_WIDTH - 250, SCREEN_HEIGHT - 60, "Skill", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+            attack_button = Button(SCREEN_WIDTH - 250, SCREEN_HEIGHT - 120, "Attack", button_img, button_img_hover)
+            skill_button = Button(SCREEN_WIDTH - 250, SCREEN_HEIGHT - 60, "Skill", button_img, button_img_hover)
 
             attack_button.draw(screen)
             skill_button.draw(screen)
@@ -850,8 +878,8 @@ class Game:
         self.draw_inventory_screen()
 
     def draw_inventory_screen(self):
-        if paper_background:
-            screen.blit(paper_background, (0,0))
+        if gold_background:
+            screen.blit(gold_background, (0,0))
         else:
             screen.fill(BLACK)
 
@@ -862,8 +890,8 @@ class Game:
 
         # Equipped items section
         self.draw_text("Equipped", 200, 200, color=BLACK)
-        weapon_slot = UI_ELEMENTS["panel"]
-        armor_slot = UI_ELEMENTS["panel"]
+        weapon_slot = gold_panel
+        armor_slot = gold_panel
         screen.blit(weapon_slot, (150, 250))
         screen.blit(armor_slot, (350, 250))
 
@@ -878,7 +906,7 @@ class Game:
         self.draw_text("Backpack", 700, 200, color=BLACK)
         inv_cols = 5
         inv_rows = 4
-        item_slot = UI_ELEMENTS["panel"]
+        item_slot = gold_panel
 
         for i in range(inv_cols * inv_rows):
             x = 700 + (i % inv_cols) * 100
@@ -893,13 +921,13 @@ class Game:
         pygame.display.flip()
 
     def game_over_screen(self):
-        if wood_background:
-            screen.blit(wood_background, (0, 0))
+        if gold_background:
+            screen.blit(gold_background, (0, 0))
         else:
             screen.fill(BLACK)
         self.draw_text("Game Over", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 150, color=BLACK)
 
-        menu_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Main Menu", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        menu_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Main Menu", button_img, button_img_hover)
         menu_button.draw(screen)
 
         pygame.display.flip()
@@ -915,13 +943,13 @@ class Game:
                     waiting = False
 
     def game_won_screen(self):
-        if wood_background:
-            screen.blit(wood_background, (0, 0))
+        if gold_background:
+            screen.blit(gold_background, (0, 0))
         else:
             screen.fill(BLACK)
         self.draw_text("You Win!", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 150, color=BLACK)
 
-        menu_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Main Menu", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        menu_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Main Menu", button_img, button_img_hover)
         menu_button.draw(screen)
 
         pygame.display.flip()
