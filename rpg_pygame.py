@@ -57,8 +57,8 @@ def load_sprite(path, size=(TILE_SIZE, TILE_SIZE)):
 try:
     wood_background = load_sprite(os.path.join("assets", "gui-files", "wood-background.png"), size=(SCREEN_WIDTH, SCREEN_HEIGHT))
     paper_background = load_sprite(os.path.join("assets", "gui-files", "paper-background.png"), size=(SCREEN_WIDTH, SCREEN_HEIGHT))
-    ui_sheet = pygame.image.load(os.path.join(script_dir, "assets", "gui-files", "gui-files.png")).convert_alpha()
-    ui_panel_background = pygame.image.load(os.path.join(script_dir,"assets", "ui_grid.png")).convert_alpha()
+    ui_sheet = pygame.image.load(os.path.join(script_dir, "ui-grid.png")).convert_alpha()
+    ui_panel_background = pygame.image.load(os.path.join(script_dir, "ui-grid.png")).convert_alpha()
 except pygame.error:
     print("Warning: Could not load UI image assets.")
     wood_background = None
@@ -73,9 +73,9 @@ def get_ui_image(x, y, w, h):
     return pygame.Surface((w, h))
 
 UI_ELEMENTS = {
-    "button_blue": get_ui_image(23, 139, 190, 49),
-    "button_blue_hover": get_ui_image(23, 188, 190, 49),
-    "panel": get_ui_image(468, 96, 190, 45)
+    "button_blue": load_sprite(os.path.join("ui_elements", "ui_element_028.png"), size=(190, 49)),
+    "button_blue_hover": load_sprite(os.path.join("ui_elements", "ui_element_029.png"), size=(190, 49)),
+    "panel": load_sprite(os.path.join("ui_elements", "ui_element_005.png"), size=(190, 45))
 }
 
 # --- Button Class ---
@@ -851,21 +851,46 @@ class Game:
         self.draw_inventory_screen()
 
     def draw_inventory_screen(self):
-        screen.fill(BLACK)
-        self.draw_text("Inventory", 10, 10)
-        self.draw_text("Press 'i' or 'ESC' to close", 10, 50)
-        
-        player = self.players[self.current_player_idx]
-        self.draw_text(f"Equipped Weapon: {player.weapon.name if player.weapon else 'None'}", 10, 100)
-        self.draw_text(f"Equipped Armor: {player.armor.name if player.armor else 'None'}", 10, 140)
+        if paper_background:
+            screen.blit(paper_background, (0,0))
+        else:
+            screen.fill(BLACK)
 
-        y = 200
-        for i, item in enumerate(player.inventory):
-            if i == self.inventory_selection:
-                pygame.draw.rect(screen, YELLOW, (5, y - 5, 400, TILE_SIZE + 10), 2)
-            screen.blit(item.sprite, (10, y))
-            self.draw_text(item.name, 50, y)
-            y += 40
+        self.draw_text("Inventory", SCREEN_WIDTH // 2 - 100, 50, color=BLACK)
+        self.draw_text("Press 'i' or 'ESC' to close", SCREEN_WIDTH // 2 - 200, 100, color=BLACK)
+
+        player = self.players[self.current_player_idx]
+
+        # Equipped items section
+        self.draw_text("Equipped", 200, 200, color=BLACK)
+        weapon_slot = UI_ELEMENTS["panel"]
+        armor_slot = UI_ELEMENTS["panel"]
+        screen.blit(weapon_slot, (150, 250))
+        screen.blit(armor_slot, (350, 250))
+
+        if player.weapon:
+            screen.blit(player.weapon.sprite, (150, 250))
+            self.draw_text(player.weapon.name, 150, 310, color=BLACK)
+        if player.armor:
+            screen.blit(player.armor.sprite, (350, 250))
+            self.draw_text(player.armor.name, 350, 310, color=BLACK)
+
+        # Inventory grid
+        self.draw_text("Backpack", 700, 200, color=BLACK)
+        inv_cols = 5
+        inv_rows = 4
+        item_slot = UI_ELEMENTS["panel"]
+
+        for i in range(inv_cols * inv_rows):
+            x = 700 + (i % inv_cols) * 100
+            y = 250 + (i // inv_cols) * 100
+            screen.blit(item_slot, (x, y))
+            if i < len(player.inventory):
+                item = player.inventory[i]
+                screen.blit(item.sprite, (x, y))
+                if i == self.inventory_selection:
+                    pygame.draw.rect(screen, YELLOW, (x, y, item_slot.get_width(), item_slot.get_height()), 3)
+
         pygame.display.flip()
 
     def game_over_screen(self):
