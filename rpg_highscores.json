@@ -1,0 +1,27 @@
+ [
+    {
+         "party": "The Champions",
+        "level": 5,
+        "xp": 5250
+    },
+     {
+         "party": "Gemini Team",
+         "level": 4,
+         "xp": 3800
+     },
+     {
+         "party": "Luke",
+         "level": 3,
+         "xp": 2100
+     },
+     {
+        "party": "Dungeon Crawlers",
+        "level": 2,
+        "xp": 1550
+    },
+    {
+        "party": "New Adventurers",
+        "level": 1,
+        "xp": 500
+    }
+]

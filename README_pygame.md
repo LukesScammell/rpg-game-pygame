@@ -1,45 +1,23 @@
-# Python RPG Adventure - Pygame Version
+# Pygame RPG Adventure - Changelog
 
-This file documents the development of a graphical RPG created with Pygame, with the help of a large language model. It tracks the game's evolution through different versions, detailing the features added at each stage and the prompts used to generate them.
+This document outlines the recent changes and development history of the Pygame RPG Adventure game.
 
-This version was started by user **LukesScammell**.
+## Version 1.1 - Bug Fixes (July 18, 2025)
 
-## How to Play
+This update addresses a critical bug that caused the game to crash with a "ValueError: cannot choose from an empty sequence" error during combat.
 
-1.  **Installation:**
-    *   Make sure you have Python installed.
-    *   Install the Pygame library by opening a terminal (like in VS Code) and running: `pip install pygame` or `py -m pip install pygame`
+### Bug Fix: Combat Skill Crash
 
-2.  **Running the Game:**
-    *   Navigate to the game's directory in your terminal.
-    *   Run the script using: `python rpg_pygame.py` or `py rpg_pygame.py`
+*   **Issue:** The game would crash if a player attempted to use the "Power Strike" (Warrior) or "Double Shot" (Archer) skill when no living enemies were left in the combat instance. The code did not check if there were valid targets before attempting to select one.
+*   **Fix:** Added checks to the `use_skill` method in `rpg_pygame.py`. Before executing a skill that targets an enemy, the game now verifies that there is at least one living enemy available. If no valid targets exist, a message is displayed to the user, and the skill is not executed, preventing the crash.
 
-3.  **Gameplay:**
-    *   **Character Creation:** Follow the on-screen prompts to choose the number of heroes, their names, and their classes (Warrior, Mage, Archer).
-    *   **Exploration:** Use the **W, A, S, D** keys to move your party through the dungeon.
-    *   **Combat:** When you move into an enemy, combat begins. On a hero's turn, use the number keys:
-        *   **(1) Attack:** Perform a basic attack on a random enemy.
-        *   **(2) Skill:** Use your class's unique, more powerful skill.
-    *   **Descending:** Find the stairs (a down arrow) to proceed to the next, more difficult dungeon level.
-    *   **Winning:** Defeat the final boss (a dragon) on the last level to win the game.
+---
 
-4.  **(Optional) Sound:**
-    *   For sound effects and music, create a folder named `assets` in the same directory as the game.
-    *   Place the following sound files inside it: `music.ogg`, `sword.wav`, `magic.wav`, `arrow.wav`, `damage.wav`.
+## Development History
 
-## Version History
+This section logs the user prompts that led to the recent updates.
 
-### v1.6.1: Emoji Font Fix
+### July 18, 2025
 
-*   **Prompt:** "it runs now, could you make a seperate readme file for the pygame version showing how to play and the versions if i update it with the prompts i gave you to make the feature and also the ui emojis arnt showing right in the pygame"
-*   **Changes:**
-    *   Updated the Pygame font handling to use "Segoe UI Emoji" to correctly display emoji icons on Windows.
-    *   Added a fallback to the default font to prevent crashes if the specified font is not found.
-
-### v1.6: Pygame GUI Implementation (by user)
-
-*   **Prompt:** "can i run the game yet or is there anything i need to add and could you add to the readme all of the new versions that got added and explain that i made the pygame version"
-*   **Changes:**
-    *   The user, LukesScammell, initiated the creation of a new version of the RPG with a graphical user interface using the Pygame library.
-    *   The initial `rpg_pygame.py` file was created, laying the foundation for the GUI.
-    *   The emoji-based UI from the command-line version was carried over as a placeholder.
+*   **User Prompt:** "could you look at my files and figure out the game and on line 800, 436, 554 and 658 on the rpg_pygame.py which says cannot choose from an empty sequence"
+*   **User Prompt:** "could you generate the new changes as a new version on the pygame readme and show the prompts i used to get the new features and things"

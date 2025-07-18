@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-print("--- RUNNING PYGAME VERSION ---")
 import random
 import os
 import json
@@ -31,30 +30,64 @@ pygame.init()
 pygame.mixer.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Python RPG Adventure")
+font = pygame.font.Font(None, 32)
 
-# --- Font Setup ---
-# Use a font that supports emojis, with a fallback to the default font
+# --- Image Assets ---
 try:
-    font = pygame.font.Font("C:/Windows/Fonts/seguiemj.ttf", 28)
-except FileNotFoundError:
-    print("Warning: Segoe UI Emoji font not found. Using default font. Emojis may not render correctly.")
-    font = pygame.font.Font(None, 32)
+    wood_background = pygame.image.load(os.path.join("rpg-game-pygame", "rpg_gui_v1", "wood-background.png")).convert()
+    paper_background = pygame.image.load(os.path.join("pg-game-Pygame", "rpg_gui_v1", "paper-background.png")).convert()
+    ui_sheet = pygame.image.load(os.path.join("rpg-game-pygame", "rpg_gui_v1", "RPG_GUI_v1.png")).convert_alpha()
+except pygame.error:
+    print("Warning: Could not load image assets. Make sure you have the 'rpg-game-pygame/rpg_gui_v1' folder with the required image files.")
+    wood_background = None
+    paper_background = None
+    ui_sheet = None
+
+# --- UI Slicing ---
+def get_ui_image(x, y, w, h):
+    if ui_sheet:
+        return ui_sheet.subsurface(pygame.Rect(x, y, w, h))
+    return pygame.Surface((w, h))
+
+UI_ELEMENTS = {
+    "button_blue": get_ui_image(34, 251, 190, 49),
+    "button_blue_hover": get_ui_image(34, 300, 190, 49),
+    "panel": get_ui_image(468, 96, 190, 45)
+}
+
+# --- Button Class ---
+class Button:
+    def __init__(self, x, y, text, image, hover_image=None):
+        self.rect = pygame.Rect(x, y, image.get_width(), image.get_height())
+        self.text = text
+        self.image = image
+        self.hover_image = hover_image if hover_image else image
+        self.is_hovered = False
+
+    def draw(self, surface):
+        current_image = self.hover_image if self.is_hovered else self.image
+        surface.blit(current_image, self.rect.topleft)
+        text_surf = font.render(self.text, True, WHITE)
+        text_rect = text_surf.get_rect(center=self.rect.center)
+        surface.blit(text_surf, text_rect)
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEMOTION:
+            self.is_hovered = self.rect.collidepoint(event.pos)
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.is_hovered:
+                return True
+        return False
 
 # --- Sound Assets ---
-music_loaded = False
 try:
     pygame.mixer.music.load(os.path.join("assets", "music.ogg"))
-    music_loaded = True
     sword_sound = pygame.mixer.Sound(os.path.join("assets", "sword.wav"))
     magic_sound = pygame.mixer.Sound(os.path.join("assets", "magic.wav"))
     arrow_sound = pygame.mixer.Sound(os.path.join("assets", "arrow.wav"))
     damage_sound = pygame.mixer.Sound(os.path.join("assets", "damage.wav"))
 except pygame.error:
-    print("Warning: Could not load sound assets. Game will run without sound.")
-    sword_sound = None
-    magic_sound = None
-    arrow_sound = None
-    damage_sound = None
+    print("Warning: Could not load sound assets. Make sure you have the 'assets' folder with the required sound files.")
 
 # --- UI Elements ---
 UI = {
@@ -160,8 +193,11 @@ class Entity:
         return self.hp > 0
 
     def take_damage(self, damage):
-        if damage > 0 and damage_sound:
-            damage_sound.play()
+        if damage > 0:
+            try:
+                damage_sound.play()
+            except NameError:
+                pass
         self.hp -= damage
         if self.hp < 0:
             self.hp = 0
@@ -319,43 +355,77 @@ class Game:
         self.turn_order = []
         self.combat_turn_idx = 0
 
-    def add_message(self, text):
-        self.messages.appendleft(text)
+    def reset_game(self):
+        self.__init__()
 
     def draw_text(self, text, x, y, color=WHITE):
         text_surface = font.render(text, True, color)
         screen.blit(text_surface, (x, y))
 
     def main_menu(self):
-        screen.fill(BLACK)
-        self.draw_text("Python RPG Adventure", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 50)
-        self.draw_text("Press ENTER to start", SCREEN_WIDTH // 2 - 120, SCREEN_HEIGHT // 2)
+        if wood_background:
+            screen.blit(wood_background, (0, 0))
+        else:
+            screen.fill(BLACK)
+        self.draw_text("Python RPG Adventure", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+
+        start_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Start Game", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        quit_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 60, "Quit", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+
+        start_button.draw(screen)
+        quit_button.draw(screen)
+
         pygame.display.flip()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.game_over = True
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    self.game_state = "setup_num_players"
+            if start_button.handle_event(event):
+                self.game_state = "setup_num_players"
+            if quit_button.handle_event(event):
+                self.game_over = True
 
     def setup_num_players(self):
-        screen.fill(BLACK)
-        self.draw_text("Enter number of heroes (1-3):", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 50)
-        self.draw_text(str(self.num_players) if self.num_players > 0 else "", SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+        if paper_background:
+            screen.blit(paper_background, (0, 0))
+        else:
+            screen.fill(BLACK)
+        self.draw_text("Enter number of heroes:", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+
+        one_player_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "1 Player", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        two_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "2 Players", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        three_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "3 Players", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+
+        one_player_button.draw(screen)
+        two_players_button.draw(screen)
+        three_players_button.draw(screen)
+
         pygame.display.flip()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.game_over = True
-            if event.type == pygame.KEYDOWN:
-                if event.key in [pygame.K_1, pygame.K_2, pygame.K_3]:
-                    self.num_players = int(pygame.key.name(event.key))
-                if event.key == pygame.K_RETURN and self.num_players > 0:
-                    self.game_state = "setup_player_name"
+            if one_player_button.handle_event(event):
+                self.num_players = 1
+                self.game_state = "setup_player_name"
+            if two_players_button.handle_event(event):
+                self.num_players = 2
+                self.game_state = "setup_player_name"
+            if three_players_button.handle_event(event):
+                self.num_players = 3
+                self.game_state = "setup_player_name"
 
     def setup_player_name(self):
-        screen.fill(BLACK)
-        self.draw_text(f"Enter name for hero {self.current_hero_setup}:", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 50)
-        self.draw_text(self.player_name, SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2)
+        if paper_background:
+            screen.blit(paper_background, (0, 0))
+        else:
+            screen.fill(BLACK)
+        self.draw_text(f"Enter name for hero {self.current_hero_setup}:", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+        
+        name_panel = UI_ELEMENTS["panel"]
+        screen.blit(name_panel, (SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 25))
+        self.draw_text(self.player_name, SCREEN_WIDTH // 2 - 85, SCREEN_HEIGHT // 2 - 15, color=BLACK)
+
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -369,32 +439,43 @@ class Game:
                     self.player_name += event.unicode
 
     def setup_player_class(self):
-        screen.fill(BLACK)
-        self.draw_text(f"Choose class for {self.player_name}:", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 50)
-        self.draw_text("1. Warrior", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2)
-        self.draw_text("2. Mage", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 40)
-        self.draw_text("3. Archer", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 + 80)
+        if paper_background:
+            screen.blit(paper_background, (0, 0))
+        else:
+            screen.fill(BLACK)
+        self.draw_text(f"Choose class for {self.player_name}:", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+
+        warrior_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "Warrior", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        mage_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "Mage", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        archer_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "Archer", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+
+        warrior_button.draw(screen)
+        mage_button.draw(screen)
+        archer_button.draw(screen)
+
         pygame.display.flip()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.game_over = True
-            if event.type == pygame.KEYDOWN:
-                class_choice = None
-                if event.key == pygame.K_1:
-                    class_choice = "warrior"
-                elif event.key == pygame.K_2:
-                    class_choice = "mage"
-                elif event.key == pygame.K_3:
-                    class_choice = "archer"
-                if class_choice:
-                    self.players.append(Player(0, 0, self.player_name, class_choice))
-                    self.player_name = ""
-                    if self.current_hero_setup < self.num_players:
-                        self.current_hero_setup += 1
-                        self.game_state = "setup_player_name"
-                    else:
-                        self.new_level()
-                        self.game_state = "playing"
+            
+            class_choice = None
+            if warrior_button.handle_event(event):
+                class_choice = "warrior"
+            elif mage_button.handle_event(event):
+                class_choice = "mage"
+            elif archer_button.handle_event(event):
+                class_choice = "archer"
+
+            if class_choice:
+                self.players.append(Player(0, 0, self.player_name, class_choice))
+                self.player_name = ""
+                if self.current_hero_setup < self.num_players:
+                    self.current_hero_setup += 1
+                    self.game_state = "setup_player_name"
+                else:
+                    self.new_level()
+                    self.game_state = "playing"
 
     def new_level(self):
         self.dungeon = Dungeon(MAP_WIDTH, MAP_HEIGHT, self.dungeon_level)
@@ -405,12 +486,10 @@ class Game:
         self.add_message(f"You have entered dungeon level {self.dungeon_level}.")
 
     def main_loop(self):
-        if music_loaded:
-            try:
-                pygame.mixer.music.play(-1)
-            except pygame.error:
-                self.add_message("Could not play music.")
-
+        try:
+            pygame.mixer.music.play(-1)
+        except pygame.error:
+            pass
         while not self.game_over:
             if self.game_state == "main_menu":
                 self.main_menu()
@@ -513,9 +592,9 @@ class Game:
 
         # Draw messages
         y = SCREEN_HEIGHT - 100
-        for i, msg in enumerate(self.messages):
-            self.draw_text(msg, 10, y - i * 20)
-
+        for msg in self.messages:
+            self.draw_text(msg, 10, y)
+            y += 20
 
     def start_combat(self, enemies):
         self.game_state = "combat"
@@ -526,20 +605,29 @@ class Game:
         self.add_message("You've entered combat!")
 
     def run_combat(self):
+        if wood_background:
+            screen.blit(wood_background, (0, 0))
+        else:
+            screen.fill(BLACK)
         self.draw_combat_screen()
         entity = self.turn_order[self.combat_turn_idx]
 
         if isinstance(entity, Player):
+            attack_button = Button(100, SCREEN_HEIGHT - 120, "Attack", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+            skill_button = Button(100, SCREEN_HEIGHT - 60, "Skill", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+
+            attack_button.draw(screen)
+            skill_button.draw(screen)
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.game_over = True
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_1:
-                        self.player_attack()
-                    elif event.key == pygame.K_2:
-                        self.use_skill(entity, self.combat_enemies)
+                if attack_button.handle_event(event):
+                    self.player_attack()
+                if skill_button.handle_event(event):
+                    self.use_skill(entity, self.combat_enemies)
         else: # Enemy turn
-            pygame.time.wait(500) # Pause for half a second to show enemy turn
+            pygame.time.wait(500) # Pause for enemy turn
             self.enemy_attack(entity)
 
         if not any(p.is_alive() for p in self.players):
@@ -555,6 +643,8 @@ class Game:
                     msg = p.gain_xp(xp_per_player)
                     if msg: self.add_message(msg)
             self.dungeon.enemies = [e for e in self.dungeon.enemies if e not in self.combat_enemies]
+
+        pygame.display.flip()
 
     def player_attack(self):
         player = self.turn_order[self.combat_turn_idx]
@@ -577,36 +667,39 @@ class Game:
 
     def next_turn(self):
         self.combat_turn_idx = (self.combat_turn_idx + 1) % len(self.turn_order)
-        # Skip turns for dead entities
-        while not self.turn_order[self.combat_turn_idx].is_alive():
-            self.combat_turn_idx = (self.combat_turn_idx + 1) % len(self.turn_order)
-
+        entity = self.turn_order[self.combat_turn_idx]
+        if not entity.is_alive():
+            self.next_turn()
 
     def draw_combat_screen(self):
-        screen.fill(BLACK)
         # Draw players
         for i, player in enumerate(self.players):
-            self.draw_text(f'{player.icon} {player.name} {UI["hp"]} {player.hp}/{player.max_hp}', 100, 100 + i * 40)
+            panel = UI_ELEMENTS["panel"]
+            screen.blit(panel, (100, 50 + i * 60))
+            self.draw_text(f'{player.icon} {player.name} {UI["hp"]} {player.hp}/{player.max_hp}', 110, 60 + i * 60, color=BLACK)
 
         # Draw enemies
         for i, enemy in enumerate(self.combat_enemies):
-            self.draw_text(f'{enemy.icon} {enemy.name} {UI["hp"]} {enemy.hp}/{enemy.max_hp}', SCREEN_WIDTH - 300, 100 + i * 40)
-
-        # Draw combat menu
-        self.draw_text("1. Attack", 100, SCREEN_HEIGHT - 100)
-        self.draw_text("2. Skill", 100, SCREEN_HEIGHT - 60)
+            panel = UI_ELEMENTS["panel"]
+            screen.blit(panel, (SCREEN_WIDTH - 300, 50 + i * 60))
+            self.draw_text(f'{enemy.icon} {enemy.name} {UI["hp"]} {enemy.hp}/{enemy.max_hp}', SCREEN_WIDTH - 290, 60 + i * 60, color=BLACK)
 
         self.draw_ui()
-        pygame.display.flip()
 
     def use_skill(self, player, enemies):
         if player.char_class == "warrior":
             if player.skill_cooldown > 0:
                 self.add_message(f"Power Strike is on cooldown for {player.skill_cooldown} more turns.")
                 return
-            if sword_sound:
+            try:
                 sword_sound.play()
-            target = random.choice([e for e in enemies if e.is_alive()])
+            except NameError:
+                pass
+            alive_enemies = [e for e in enemies if e.is_alive()]
+            if not alive_enemies:
+                self.add_message("There are no enemies to attack.")
+                return
+            target = random.choice(alive_enemies)
             damage = player.attack * 2
             target.take_damage(damage)
             self.add_message(f"{player.name} uses Power Strike on {target.name} for {damage} damage!")
@@ -615,8 +708,10 @@ class Game:
             if player.mana < 10:
                 self.add_message("Not enough mana for Fireball.")
                 return
-            if magic_sound:
+            try:
                 magic_sound.play()
+            except NameError:
+                pass
             self.add_message(f"{player.name} casts Fireball!")
             for enemy in enemies:
                 if enemy.is_alive():
@@ -628,11 +723,17 @@ class Game:
             if player.skill_cooldown > 0:
                 self.add_message(f"Double Shot is on cooldown for {player.skill_cooldown} more turns.")
                 return
-            if arrow_sound:
+            try:
                 arrow_sound.play()
+            except NameError:
+                pass
+            alive_enemies = [e for e in enemies if e.is_alive()]
+            if not alive_enemies:
+                self.add_message("There are no enemies to attack.")
+                return
             self.add_message(f"{player.name} uses Double Shot!")
             for _ in range(2):
-                target = random.choice([e for e in enemies if e.is_alive()])
+                target = random.choice(alive_enemies)
                 damage = player.attack
                 target.take_damage(damage)
                 self.add_message(f"{player.name} shoots {target.name} for {damage} damage.")
@@ -640,22 +741,23 @@ class Game:
         self.next_turn()
 
     def game_over_screen(self):
-        screen.fill(BLACK)
-        self.draw_text("Game Over", SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 - 25)
-        self.draw_text("Press ENTER to return to the main menu", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2)
-        pygame.display.flip()
-        waiting = True
-        while waiting:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    self.game_over = True
-                    waiting = False
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RETURN:
-                        # Reset game state for a new game
-                        self.__init__()
-                        waiting = False
+        if wood_background:
+            screen.blit(wood_background, (0, 0))
+        else:
+            screen.fill(BLACK)
+        self.draw_text("Game Over", SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 - 100, color=BLACK)
 
+        menu_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Main Menu", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        menu_button.draw(screen)
+
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.game_over = True
+            if menu_button.handle_event(event):
+                self.reset_game()
+                self.game_state = "main_menu"
 
 if __name__ == "__main__":
     game = Game()
