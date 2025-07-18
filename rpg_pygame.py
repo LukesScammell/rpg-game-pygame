@@ -58,7 +58,6 @@ try:
     wood_background = load_sprite(os.path.join("assets", "gui-files", "wood-background.png"), size=(SCREEN_WIDTH, SCREEN_HEIGHT))
     paper_background = load_sprite(os.path.join("assets", "gui-files", "paper-background.png"), size=(SCREEN_WIDTH, SCREEN_HEIGHT))
     ui_sheet = pygame.image.load(os.path.join(script_dir, "ui-grid.png")).convert_alpha()
-    ui_panel_background = pygame.image.load(os.path.join(script_dir, "ui-grid.png")).convert_alpha()
 except pygame.error:
     print("Warning: Could not load UI image assets.")
     wood_background = None
@@ -72,11 +71,11 @@ def get_ui_image(x, y, w, h):
         return ui_sheet.subsurface(pygame.Rect(x, y, w, h))
     return pygame.Surface((w, h))
 
-UI_ELEMENTS = {
-    "button_blue": load_sprite(os.path.join("ui_elements", "ui_element_028.png"), size=(190, 49)),
-    "button_blue_hover": load_sprite(os.path.join("ui_elements", "ui_element_029.png"), size=(190, 49)),
-    "panel": load_sprite(os.path.join("ui_elements", "ui_element_005.png"), size=(190, 45))
-}
+from golden_ui_loader import load_ui_elements
+
+UI_ELEMENTS = load_ui_elements(os.path.join(script_dir, "ui_elements"), scale=2)
+
+
 
 # --- Button Class ---
 class Button:
