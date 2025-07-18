@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+print("--- RUNNING PYGAME VERSION ---")
 import random
 import os
 import json
@@ -8,12 +9,12 @@ from collections import deque
 # --- Constants ---
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 720
-MAP_WIDTH = 40
+TILE_SIZE = 32
+MAP_WIDTH = 25 
 MAP_HEIGHT = 20
-TILE_SIZE = 24
-ROOM_MAX_SIZE = 10
-ROOM_MIN_SIZE = 6
-MAX_ROOMS = 15
+ROOM_MAX_SIZE = 8
+ROOM_MIN_SIZE = 4
+MAX_ROOMS = 12
 MAX_DUNGEON_LEVEL = 5
 HIGHSCORE_FILE = "rpg_highscores.json"
 
@@ -24,23 +25,41 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 GRAY = (128, 128, 128)
+YELLOW = (255, 255, 0) # For selection highlight
 
 # --- Pygame Setup ---
 pygame.init()
 pygame.mixer.init()
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Python RPG Adventure")
-font = pygame.font.Font(None, 32)
 
-# --- Image Assets ---
+# --- Font Setup ---
+try:
+    font = pygame.font.Font("C:/Windows/Fonts/seguiemj.ttf", 28)
+except FileNotFoundError:
+    print("Warning: Segoe UI Emoji font not found. Using default font.")
+    font = pygame.font.Font(None, 32)
+
+# --- Asset Loading ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
+def load_sprite(path, size=(TILE_SIZE, TILE_SIZE)):
+    try:
+        sprite = pygame.image.load(os.path.join(script_dir, path)).convert_alpha()
+        return pygame.transform.scale(sprite, size)
+    except pygame.error:
+        print(f"Error: Cannot load sprite '{path}'.")
+        surface = pygame.Surface(size)
+        surface.fill(RED)
+        return surface
+
+# --- UI Image Assets ---
 try:
-    wood_background = pygame.image.load(os.path.join(script_dir, "assets", "gui-files", "wood background.png")).convert()
-    paper_background = pygame.image.load(os.path.join(script_dir, "assets", "gui-files", "paper background.png")).convert()
-    ui_sheet = pygame.image.load(os.path.join(script_dir,  "assets", "gui-files", "gui-files.png")).convert_alpha()
+    wood_background = load_sprite(os.path.join("assets", "gui-files", "wood-background.png"), size=(SCREEN_WIDTH, SCREEN_HEIGHT))
+    paper_background = load_sprite(os.path.join("assets", "gui-files", "paper-background.png"), size=(SCREEN_WIDTH, SCREEN_HEIGHT))
+    ui_sheet = pygame.image.load(os.path.join(script_dir, "assets", "gui-files", "gui-files.png")).convert_alpha()
 except pygame.error:
-    print("Warning: Could not load image assets. Make sure you have the ' assets, gui-files,' folder with the required image files.")
+    print("Warning: Could not load UI image assets.")
     wood_background = None
     paper_background = None
     ui_sheet = None
@@ -52,8 +71,8 @@ def get_ui_image(x, y, w, h):
     return pygame.Surface((w, h))
 
 UI_ELEMENTS = {
-    "button_blue": get_ui_image(34, 251, 190, 49),
-    "button_blue_hover": get_ui_image(34, 300, 190, 49),
+    "button_wood_1": get_ui_image(23, 139, 190, 49),
+    "button_wood_1_hover": get_ui_image(23, 188, 190, 49),
     "panel": get_ui_image(468, 96, 190, 45)
 }
 
@@ -69,7 +88,7 @@ class Button:
     def draw(self, surface):
         current_image = self.hover_image if self.is_hovered else self.image
         surface.blit(current_image, self.rect.topleft)
-        text_surf = font.render(self.text, True, BLACK)
+        text_surf = font.render(self.text, True, WHITE)
         text_rect = text_surf.get_rect(center=self.rect.center)
         surface.blit(text_surf, text_rect)
 
@@ -81,64 +100,66 @@ class Button:
                 return True
         return False
 
+# --- Sprite Definitions ---
+SPRITE_PATH = os.path.join("assets", "crawl-tiles Oct-5-2010")
+SPRITES = {
+    "player": load_sprite(os.path.join(SPRITE_PATH, "player/base/human_m.png")),
+    "warrior": load_sprite(os.path.join(SPRITE_PATH, "dc-mon/orc_warrior.png")),
+    "mage": load_sprite(os.path.join(SPRITE_PATH, "dc-mon/deep_elf_mage.png")),
+    "archer": load_sprite(os.path.join(SPRITE_PATH, "dc-mon/deep_elf_master_archer.png")),
+    "goblin": load_sprite(os.path.join(SPRITE_PATH, "dc-mon/goblin.png")),
+    "orc": load_sprite(os.path.join(SPRITE_PATH, "dc-mon/orc.png")),
+    "troll": load_sprite(os.path.join(SPRITE_PATH, "dc-mon/troll.png")),
+    "dragon": load_sprite(os.path.join(SPRITE_PATH, "dc-mon/dragon.png")),
+    "potion": load_sprite(os.path.join(SPRITE_PATH, "item/potion/i-heal.png")),
+    "weapon": load_sprite(os.path.join(SPRITE_PATH, "item/weapon/short_sword1.png")),
+    "armor": load_sprite(os.path.join(SPRITE_PATH, "item/armour/leather_armour1.png")),
+    "wall": load_sprite(os.path.join(SPRITE_PATH, "dc-dngn/wall/brick_brown0.png")),
+    "floor": load_sprite(os.path.join(SPRITE_PATH, "dc-dngn/floor/cobble_blood1.png")),
+    "stairs": load_sprite(os.path.join(SPRITE_PATH, "dc-dngn/gateways/stone_stairs_down.png")),
+}
+
+
 # --- Sound Assets ---
+music_loaded = False
 try:
     pygame.mixer.music.load(os.path.join("assets", "music.ogg"))
+    music_loaded = True
     sword_sound = pygame.mixer.Sound(os.path.join("assets", "sword.wav"))
     magic_sound = pygame.mixer.Sound(os.path.join("assets", "magic.wav"))
     arrow_sound = pygame.mixer.Sound(os.path.join("assets", "arrow.wav"))
     damage_sound = pygame.mixer.Sound(os.path.join("assets", "damage.wav"))
 except pygame.error:
-    print("Warning: Could not load sound assets. Make sure you have the 'assets' folder with the required sound files.")
-
-# --- UI Elements ---
-UI = {
-    "player": "🧑",
-    "warrior": "🤺",
-    "mage": "🧙",
-    "archer": "🏹",
-    "goblin": "👺",
-    "orc": "👹",
-    "troll": "🗿",
-    "dragon": "🐉",
-    "potion": "🧪",
-    "weapon": "⚔️",
-    "armor": "🛡️",
-    "wall": "🧱",
-    "floor": ".",
-    "stairs": "🔽",
-    "hp": "❤️",
-    "xp": "✨",
-    "mana": "💧",
-    "attack": "💥",
-    "defense": "🛡️",
-    "level": "🌟"
-}
+    print("Warning: Could not load sound assets. Game will run without sound.")
+    sword_sound = None
+    magic_sound = None
+    arrow_sound = None
+    damage_sound = None
 
 # --- Character Classes ---
 CLASSES = {
-    "warrior": {"hp": 120, "attack": 15, "defense": 10, "icon": UI["warrior"], "weapon": "Sword", "mana": 0},
-    "mage": {"hp": 80, "attack": 20, "defense": 5, "icon": UI["mage"], "weapon": "Staff", "mana": 20},
-    "archer": {"hp": 100, "attack": 12, "defense": 8, "icon": UI["archer"], "weapon": "Bow", "mana": 0}
+    "warrior": {"hp": 120, "attack": 15, "defense": 10, "sprite": SPRITES["warrior"], "weapon": "Sword", "mana": 0},
+    "mage": {"hp": 80, "attack": 20, "defense": 5, "sprite": SPRITES["mage"], "weapon": "Staff", "mana": 20},
+    "archer": {"hp": 100, "attack": 12, "defense": 8, "sprite": SPRITES["archer"], "weapon": "Bow", "mana": 0}
 }
 
 # --- Enemy Types ---
 ENEMIES = {
-    "goblin": {"hp": 30, "attack": 8, "defense": 2, "xp": 50, "icon": UI["goblin"]},
-    "orc": {"hp": 50, "attack": 12, "defense": 4, "xp": 100, "icon": UI["orc"]},
-    "troll": {"hp": 80, "attack": 15, "defense": 6, "xp": 150, "icon": UI["troll"]},
-    "dragon": {"hp": 250, "attack": 25, "defense": 15, "xp": 1000, "icon": UI["dragon"]}
+    "goblin": {"hp": 30, "attack": 8, "defense": 2, "xp": 50, "sprite": SPRITES["goblin"]},
+    "orc": {"hp": 50, "attack": 12, "defense": 4, "xp": 100, "sprite": SPRITES["orc"]},
+    "troll": {"hp": 80, "attack": 15, "defense": 6, "xp": 150, "sprite": SPRITES["troll"]},
+    "dragon": {"hp": 250, "attack": 25, "defense": 15, "xp": 1000, "sprite": SPRITES["dragon"]}
 }
 
 # --- Items ---
 class Item:
-    def __init__(self, name, icon):
+    def __init__(self, name, sprite):
         self.name = name
-        self.icon = icon
+        self.sprite = sprite
 
 class Potion(Item):
     def __init__(self, name, hp_gain):
-        super().__init__(name, UI["potion"])
+        super().__init__(name, SPRITES["potion"])
         self.hp_gain = hp_gain
 
     def use(self, target):
@@ -147,12 +168,12 @@ class Potion(Item):
 
 class Weapon(Item):
     def __init__(self, name, attack_bonus):
-        super().__init__(name, UI["weapon"])
+        super().__init__(name, SPRITES["weapon"])
         self.attack_bonus = attack_bonus
 
 class Armor(Item):
     def __init__(self, name, defense_bonus):
-        super().__init__(name, UI["armor"])
+        super().__init__(name, SPRITES["armor"])
         self.defense_bonus = defense_bonus
 
 # --- Pre-defined Items ---
@@ -171,7 +192,7 @@ ARMOR = [
 
 # --- Entities ---
 class Entity:
-    def __init__(self, x, y, name, hp, attack, defense, icon):
+    def __init__(self, x, y, name, hp, attack, defense, sprite):
         self.x = x
         self.y = y
         self.name = name
@@ -179,7 +200,7 @@ class Entity:
         self.base_defense = defense
         self.max_hp = hp
         self.hp = hp
-        self.icon = icon
+        self.sprite = sprite
 
     @property
     def attack(self):
@@ -195,18 +216,15 @@ class Entity:
         return self.hp > 0
 
     def take_damage(self, damage):
-        if damage > 0:
-            try:
-                damage_sound.play()
-            except NameError:
-                pass
+        if damage > 0 and damage_sound:
+            damage_sound.play()
         self.hp -= damage
         if self.hp < 0:
             self.hp = 0
 
 class Player(Entity):
     def __init__(self, x, y, name, char_class):
-        super().__init__(x, y, name, CLASSES[char_class]["hp"], CLASSES[char_class]["attack"], CLASSES[char_class]["defense"], CLASSES[char_class]["icon"])
+        super().__init__(x, y, name, CLASSES[char_class]["hp"], CLASSES[char_class]["attack"], CLASSES[char_class]["defense"], CLASSES[char_class]["sprite"])
         self.char_class = char_class
         self.xp = 0
         self.level = 1
@@ -236,7 +254,7 @@ class Player(Entity):
 
 class Enemy(Entity):
     def __init__(self, x, y, enemy_type):
-        super().__init__(x, y, enemy_type.capitalize(), ENEMIES[enemy_type]["hp"], ENEMIES[enemy_type]["attack"], ENEMIES[enemy_type]["defense"], ENEMIES[enemy_type]["icon"])
+        super().__init__(x, y, enemy_type.capitalize(), ENEMIES[enemy_type]["hp"], ENEMIES[enemy_type]["attack"], ENEMIES[enemy_type]["defense"], ENEMIES[enemy_type]["sprite"])
         self.xp = ENEMIES[enemy_type]["xp"]
 
 # --- Map Generation ---
@@ -261,7 +279,7 @@ class Dungeon:
         self.width = width
         self.height = height
         self.level = level
-        self.grid = [[UI["wall"] for _ in range(width)] for _ in range(height)]
+        self.grid = [[SPRITES["wall"] for _ in range(width)] for _ in range(height)]
         self.rooms = []
         self.items = []
         self.enemies = []
@@ -270,15 +288,15 @@ class Dungeon:
     def create_room(self, room):
         for x in range(room.x1 + 1, room.x2):
             for y in range(room.y1 + 1, room.y2):
-                self.grid[y][x] = UI["floor"]
+                self.grid[y][x] = SPRITES["floor"]
 
     def create_h_tunnel(self, x1, x2, y):
         for x in range(min(x1, x2), max(x1, x2) + 1):
-            self.grid[y][x] = UI["floor"]
+            self.grid[y][x] = SPRITES["floor"]
 
     def create_v_tunnel(self, y1, y2, x):
         for y in range(min(y1, y2), max(y1, y2) + 1):
-            self.grid[y][x] = UI["floor"]
+            self.grid[y][x] = SPRITES["floor"]
 
     def generate(self):
         for _ in range(MAX_ROOMS):
@@ -309,7 +327,7 @@ class Dungeon:
         if self.level < MAX_DUNGEON_LEVEL:
             last_room = self.rooms[-1]
             self.stairs_down = last_room.center()
-            self.grid[self.stairs_down[1]][self.stairs_down[0]] = UI["stairs"]
+            self.grid[self.stairs_down[1]][self.stairs_down[0]] = SPRITES["stairs"]
         else: # Boss level
             boss_room = self.rooms[-1]
             boss_x, boss_y = boss_room.center()
@@ -356,9 +374,10 @@ class Game:
         self.combat_enemies = []
         self.turn_order = []
         self.combat_turn_idx = 0
+        self.inventory_selection = 0
 
-    def reset_game(self):
-        self.__init__()
+    def add_message(self, text):
+        self.messages.appendleft(text)
 
     def draw_text(self, text, x, y, color=WHITE):
         text_surface = font.render(text, True, color)
@@ -369,12 +388,14 @@ class Game:
             screen.blit(wood_background, (0, 0))
         else:
             screen.fill(BLACK)
-        self.draw_text("Python RPG Adventure", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+        self.draw_text("Python RPG Adventure", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150, color=BLACK)
 
-        start_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Start Game", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        quit_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 60, "Quit", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        start_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "Start Game", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
+        leaderboard_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "Leaderboard", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
+        quit_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "Quit", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
 
         start_button.draw(screen)
+        leaderboard_button.draw(screen)
         quit_button.draw(screen)
 
         pygame.display.flip()
@@ -384,6 +405,8 @@ class Game:
                 self.game_over = True
             if start_button.handle_event(event):
                 self.game_state = "setup_num_players"
+            if leaderboard_button.handle_event(event):
+                self.game_state = "leaderboard"
             if quit_button.handle_event(event):
                 self.game_over = True
 
@@ -392,11 +415,11 @@ class Game:
             screen.blit(paper_background, (0, 0))
         else:
             screen.fill(BLACK)
-        self.draw_text("Enter number of heroes:", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+        self.draw_text("Enter number of heroes:", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150, color=BLACK)
 
-        one_player_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "1 Player", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        two_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "2 Players", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        three_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "3 Players", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        one_player_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "1 Player", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
+        two_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "2 Players", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
+        three_players_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "3 Players", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
 
         one_player_button.draw(screen)
         two_players_button.draw(screen)
@@ -422,7 +445,7 @@ class Game:
             screen.blit(paper_background, (0, 0))
         else:
             screen.fill(BLACK)
-        self.draw_text(f"Enter name for hero {self.current_hero_setup}:", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+        self.draw_text(f"Enter name for hero {self.current_hero_setup}:", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150, color=BLACK)
         
         name_panel = UI_ELEMENTS["panel"]
         screen.blit(name_panel, (SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 25))
@@ -445,11 +468,11 @@ class Game:
             screen.blit(paper_background, (0, 0))
         else:
             screen.fill(BLACK)
-        self.draw_text(f"Choose class for {self.player_name}:", SCREEN_WIDTH // 2 - 150, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+        self.draw_text(f"Choose class for {self.player_name}:", SCREEN_WIDTH // 2 - 200, SCREEN_HEIGHT // 2 - 150, color=BLACK)
 
-        warrior_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "Warrior", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        mage_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "Mage", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-        archer_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "Archer", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        warrior_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 - 50, "Warrior", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
+        mage_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 10, "Mage", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
+        archer_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2 + 70, "Archer", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
 
         warrior_button.draw(screen)
         mage_button.draw(screen)
@@ -488,10 +511,12 @@ class Game:
         self.add_message(f"You have entered dungeon level {self.dungeon_level}.")
 
     def main_loop(self):
-        try:
-            pygame.mixer.music.play(-1)
-        except pygame.error:
-            pass
+        if music_loaded:
+            try:
+                pygame.mixer.music.play(-1)
+            except pygame.error:
+                self.add_message("Could not play music.")
+
         while not self.game_over:
             if self.game_state == "main_menu":
                 self.main_menu()
@@ -505,8 +530,14 @@ class Game:
                 self.run_game()
             elif self.game_state == "combat":
                 self.run_combat()
+            elif self.game_state == "inventory":
+                self.run_inventory()
             elif self.game_state == "game_over":
                 self.game_over_screen()
+            elif self.game_state == "game_won":
+                self.game_won_screen()
+            elif self.game_state == "leaderboard":
+                self.leaderboard_screen()
 
     def run_game(self):
         for event in pygame.event.get():
@@ -526,6 +557,9 @@ class Game:
             self.move_player(player, 'a')
         elif key == pygame.K_d:
             self.move_player(player, 'd')
+        elif key == pygame.K_i:
+            self.game_state = "inventory"
+            self.inventory_selection = 0
         self.current_player_idx = (self.current_player_idx + 1) % len(self.players)
 
     def move_player(self, player, direction):
@@ -541,12 +575,12 @@ class Game:
             self.add_message("You can't move off the map.")
             return
 
-        if self.dungeon.grid[new_y][new_x] == UI["stairs"]:
+        if self.dungeon.grid[new_y][new_x] == SPRITES["stairs"]:
             self.dungeon_level += 1
             self.new_level()
             return
 
-        if self.dungeon.grid[new_y][new_x] == UI["floor"]:
+        if self.dungeon.grid[new_y][new_x] == SPRITES["floor"]:
             enemies_in_pos = [e for e in self.dungeon.enemies if e.x == new_x and e.y == new_y]
             if enemies_in_pos:
                 self.start_combat(enemies_in_pos)
@@ -566,20 +600,15 @@ class Game:
         # Draw map
         for y in range(self.dungeon.height):
             for x in range(self.dungeon.width):
-                icon = self.dungeon.grid[y][x]
-                text = font.render(icon, True, WHITE)
-                screen.blit(text, (x * TILE_SIZE, y * TILE_SIZE))
+                screen.blit(self.dungeon.grid[y][x], (x * TILE_SIZE, y * TILE_SIZE))
 
         # Draw items, enemies, players
         for item in self.dungeon.items:
-            text = font.render(item.icon, True, WHITE)
-            screen.blit(text, (item.x * TILE_SIZE, item.y * TILE_SIZE))
+            screen.blit(item.sprite, (item.x * TILE_SIZE, item.y * TILE_SIZE))
         for enemy in self.dungeon.enemies:
-            text = font.render(enemy.icon, True, RED)
-            screen.blit(text, (enemy.x * TILE_SIZE, enemy.y * TILE_SIZE))
+            screen.blit(enemy.sprite, (enemy.x * TILE_SIZE, enemy.y * TILE_SIZE))
         for player in self.players:
-            text = font.render(player.icon, True, GREEN)
-            screen.blit(text, (player.x * TILE_SIZE, player.y * TILE_SIZE))
+            screen.blit(player.sprite, (player.x * TILE_SIZE, player.y * TILE_SIZE))
 
         # Draw UI
         self.draw_ui()
@@ -589,14 +618,14 @@ class Game:
         # Draw player status
         y = 10
         for p in self.players:
-            self.draw_text(f'{p.icon} {p.name} ({p.char_class}) | {UI["level"]} {p.level} | {UI["hp"]} {p.hp}/{p.max_hp}', 10, y)
+            self.draw_text(f'{p.name} ({p.char_class}) | HP: {p.hp}/{p.max_hp}', 10, y)
             y += 30
 
         # Draw messages
         y = SCREEN_HEIGHT - 100
-        for msg in self.messages:
-            self.draw_text(msg, 10, y)
-            y += 20
+        for i, msg in enumerate(self.messages):
+            self.draw_text(msg, 10, y - i * 20)
+
 
     def start_combat(self, enemies):
         self.game_state = "combat"
@@ -615,8 +644,8 @@ class Game:
         entity = self.turn_order[self.combat_turn_idx]
 
         if isinstance(entity, Player):
-            attack_button = Button(100, SCREEN_HEIGHT - 120, "Attack", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
-            skill_button = Button(100, SCREEN_HEIGHT - 60, "Skill", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+            attack_button = Button(SCREEN_WIDTH - 250, SCREEN_HEIGHT - 120, "Attack", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
+            skill_button = Button(SCREEN_WIDTH - 250, SCREEN_HEIGHT - 60, "Skill", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
 
             attack_button.draw(screen)
             skill_button.draw(screen)
@@ -634,10 +663,16 @@ class Game:
 
         if not any(p.is_alive() for p in self.players):
             self.add_message("Your party has been defeated. Game Over.")
+            self.update_highscores()
             self.game_state = "game_over"
         elif not any(e.is_alive() for e in self.combat_enemies):
-            self.add_message("You won the battle!")
-            self.game_state = "playing"
+            if any(e.name == 'Dragon' for e in self.combat_enemies):
+                self.add_message("Congratulations! You have defeated the Dragon and won the game!")
+                self.update_highscores()
+                self.game_state = "game_won"
+            else:
+                self.add_message("You won the battle!")
+                self.game_state = "playing"
             total_xp = sum(e.xp for e in self.combat_enemies)
             xp_per_player = total_xp // len(self.players) if self.players else 0
             for p in self.players:
@@ -669,39 +704,36 @@ class Game:
 
     def next_turn(self):
         self.combat_turn_idx = (self.combat_turn_idx + 1) % len(self.turn_order)
-        entity = self.turn_order[self.combat_turn_idx]
-        if not entity.is_alive():
-            self.next_turn()
+        while not self.turn_order[self.combat_turn_idx].is_alive():
+            self.combat_turn_idx = (self.combat_turn_idx + 1) % len(self.turn_order)
+
 
     def draw_combat_screen(self):
         # Draw players
         for i, player in enumerate(self.players):
             panel = UI_ELEMENTS["panel"]
-            screen.blit(panel, (100, 50 + i * 60))
-            self.draw_text(f'{player.icon} {player.name} {UI["hp"]} {player.hp}/{player.max_hp}', 110, 60 + i * 60, color=BLACK)
+            screen.blit(panel, (100, 50 + i * 80))
+            self.draw_text(f'{player.name} HP: {player.hp}/{player.max_hp}', 110, 60 + i * 80, color=BLACK)
 
         # Draw enemies
         for i, enemy in enumerate(self.combat_enemies):
             panel = UI_ELEMENTS["panel"]
-            screen.blit(panel, (SCREEN_WIDTH - 300, 50 + i * 60))
-            self.draw_text(f'{enemy.icon} {enemy.name} {UI["hp"]} {enemy.hp}/{enemy.max_hp}', SCREEN_WIDTH - 290, 60 + i * 60, color=BLACK)
+            screen.blit(panel, (SCREEN_WIDTH - 300, 50 + i * 80))
+            self.draw_text(f'{enemy.name} HP: {enemy.hp}/{enemy.max_hp}', SCREEN_WIDTH - 290, 60 + i * 80, color=BLACK)
 
-        self.draw_ui()
+        # Draw message log on the left
+        y = SCREEN_HEIGHT - 150
+        for i, msg in enumerate(self.messages):
+            self.draw_text(msg, 10, y - i * 20, color=BLACK)
 
     def use_skill(self, player, enemies):
         if player.char_class == "warrior":
             if player.skill_cooldown > 0:
                 self.add_message(f"Power Strike is on cooldown for {player.skill_cooldown} more turns.")
                 return
-            try:
+            if sword_sound:
                 sword_sound.play()
-            except NameError:
-                pass
-            alive_enemies = [e for e in enemies if e.is_alive()]
-            if not alive_enemies:
-                self.add_message("There are no enemies to attack.")
-                return
-            target = random.choice(alive_enemies)
+            target = random.choice([e for e in enemies if e.is_alive()])
             damage = player.attack * 2
             target.take_damage(damage)
             self.add_message(f"{player.name} uses Power Strike on {target.name} for {damage} damage!")
@@ -710,10 +742,8 @@ class Game:
             if player.mana < 10:
                 self.add_message("Not enough mana for Fireball.")
                 return
-            try:
+            if magic_sound:
                 magic_sound.play()
-            except NameError:
-                pass
             self.add_message(f"{player.name} casts Fireball!")
             for enemy in enemies:
                 if enemy.is_alive():
@@ -725,41 +755,161 @@ class Game:
             if player.skill_cooldown > 0:
                 self.add_message(f"Double Shot is on cooldown for {player.skill_cooldown} more turns.")
                 return
-            try:
+            if arrow_sound:
                 arrow_sound.play()
-            except NameError:
-                pass
-            alive_enemies = [e for e in enemies if e.is_alive()]
-            if not alive_enemies:
-                self.add_message("There are no enemies to attack.")
-                return
             self.add_message(f"{player.name} uses Double Shot!")
             for _ in range(2):
-                target = random.choice(alive_enemies)
+                target = random.choice([e for e in enemies if e.is_alive()])
                 damage = player.attack
                 target.take_damage(damage)
                 self.add_message(f"{player.name} shoots {target.name} for {damage} damage.")
             player.skill_cooldown = 2
         self.next_turn()
 
+    def run_inventory(self):
+        player = self.players[self.current_player_idx]
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.game_over = True
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_i or event.key == pygame.K_ESCAPE:
+                    self.game_state = "playing"
+                if event.key == pygame.K_UP:
+                    self.inventory_selection = max(0, self.inventory_selection - 1)
+                if event.key == pygame.K_DOWN:
+                    self.inventory_selection = min(len(player.inventory) - 1, self.inventory_selection + 1)
+                if event.key == pygame.K_e:
+                    if player.inventory:
+                        item = player.inventory[self.inventory_selection]
+                        if isinstance(item, Potion):
+                            msg = item.use(player)
+                            self.add_message(msg)
+                            player.inventory.pop(self.inventory_selection)
+                        elif isinstance(item, Weapon):
+                            if player.weapon:
+                                player.inventory.append(player.weapon)
+                            player.weapon = item
+                            player.inventory.pop(self.inventory_selection)
+                            self.add_message(f"{player.name} equipped {item.name}.")
+                        elif isinstance(item, Armor):
+                            if player.armor:
+                                player.inventory.append(player.armor)
+                            player.armor = item
+                            player.inventory.pop(self.inventory_selection)
+                            self.add_message(f"{player.name} equipped {item.name}.")
+                        self.inventory_selection = 0
+        self.draw_inventory_screen()
+
+    def draw_inventory_screen(self):
+        screen.fill(BLACK)
+        self.draw_text("Inventory", 10, 10)
+        self.draw_text("Press 'i' or 'ESC' to close", 10, 50)
+        
+        player = self.players[self.current_player_idx]
+        self.draw_text(f"Equipped Weapon: {player.weapon.name if player.weapon else 'None'}", 10, 100)
+        self.draw_text(f"Equipped Armor: {player.armor.name if player.armor else 'None'}", 10, 140)
+
+        y = 200
+        for i, item in enumerate(player.inventory):
+            if i == self.inventory_selection:
+                pygame.draw.rect(screen, YELLOW, (5, y - 5, 400, TILE_SIZE + 10), 2)
+            screen.blit(item.sprite, (10, y))
+            self.draw_text(item.name, 50, y)
+            y += 40
+        pygame.display.flip()
+
     def game_over_screen(self):
         if wood_background:
             screen.blit(wood_background, (0, 0))
         else:
             screen.fill(BLACK)
-        self.draw_text("Game Over", SCREEN_WIDTH // 2 - 50, SCREEN_HEIGHT // 2 - 100, color=BLACK)
+        self.draw_text("Game Over", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 150, color=BLACK)
 
-        menu_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Main Menu", UI_ELEMENTS["button_blue"], UI_ELEMENTS["button_blue_hover"])
+        menu_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Main Menu", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
         menu_button.draw(screen)
 
         pygame.display.flip()
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.game_over = True
-            if menu_button.handle_event(event):
-                self.reset_game()
-                self.game_state = "main_menu"
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.game_over = True
+                    waiting = False
+                if menu_button.handle_event(event):
+                    self.__init__()
+                    waiting = False
+
+    def game_won_screen(self):
+        if wood_background:
+            screen.blit(wood_background, (0, 0))
+        else:
+            screen.fill(BLACK)
+        self.draw_text("You Win!", SCREEN_WIDTH // 2 - 100, SCREEN_HEIGHT // 2 - 150, color=BLACK)
+
+        menu_button = Button(SCREEN_WIDTH // 2 - 95, SCREEN_HEIGHT // 2, "Main Menu", UI_ELEMENTS["button_wood_1"], UI_ELEMENTS["button_wood_1_hover"])
+        menu_button.draw(screen)
+
+        pygame.display.flip()
+
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.game_over = True
+                    waiting = False
+                if menu_button.handle_event(event):
+                    self.__init__()
+                    waiting = False
+
+    def update_highscores(self):
+        scores = []
+        if os.path.exists(HIGHSCORE_FILE):
+            try:
+                with open(HIGHSCORE_FILE, 'r') as f:
+                    scores = json.load(f)
+            except json.JSONDecodeError:
+                scores = []
+        
+        total_xp = sum(p.xp for p in self.players)
+        party_names = ", ".join([p.name for p in self.players])
+        scores.append({"party": party_names, "level": self.dungeon_level, "xp": total_xp})
+        
+        scores = sorted(scores, key=lambda x: (x['level'], x['xp']), reverse=True)[:10]
+
+        with open(HIGHSCORE_FILE, 'w') as f:
+            json.dump(scores, f, indent=4)
+
+    def leaderboard_screen(self):
+        screen.fill(BLACK)
+        self.draw_text("Leaderboard", SCREEN_WIDTH // 2 - 100, 50)
+
+        scores = []
+        if os.path.exists(HIGHSCORE_FILE):
+            try:
+                with open(HIGHSCORE_FILE, 'r') as f:
+                    scores = json.load(f)
+            except json.JSONDecodeError:
+                scores = []
+
+        y = 150
+        for i, score in enumerate(scores):
+            self.draw_text(f"{i+1}. {score['party']} - Level: {score['level']}, XP: {score['xp']}", 100, y)
+            y += 40
+
+        self.draw_text("Press ESC to return to the main menu", 100, SCREEN_HEIGHT - 100)
+        pygame.display.flip()
+
+        waiting = True
+        while waiting:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.game_over = True
+                    waiting = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.game_state = "main_menu"
+                        waiting = False
 
 if __name__ == "__main__":
     game = Game()
